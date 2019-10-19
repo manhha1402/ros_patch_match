@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="2">
+<name>ros_patch_match</name>
+<version>0.0.1</version>
+<description>The ros_patch_match package</description>
+<author email="manh.ha.hoang@ipa.fraunhofer.de">Manh Ha Hoang</author>
+<maintainer email="manh.ha.hoang@ipa.fraunhofer.de">Manh Ha Hoang</maintainer>
+  <author>Manh Ha Hoang</author>
+<license>Apache</license>
+<buildtool_depend>catkin</buildtool_depend>
+<depend>cmake_modules</depend>
+<depend>message_generation</depend>
+<depend>message_runtime</depend>
+<depend>roscpp</depend>
+<depend>roslaunch</depend>
+<depend>roslib</depend>
+<depend>rospy</depend>
+<depend>std_msgs</depend>
+
+<export>
+
+</export>
+</package>

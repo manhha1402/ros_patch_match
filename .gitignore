@@ -1,0 +1,47 @@
+build/
+bin/
+lib/
+data_collection/
+objects/
+data_dslr/
+data/
+# generated docs
+*.dox
+*.wikidoc
+*.tar
+# eclipse
+.project
+.cproject
+
+# qcreator
+qtcreator-*
+*.user
+
+# Emacs
+.#*
+
+# VI/VIM
+*.swp
+
+# python files
+*.pyc
+*.pco
+
+# temporary files
+*~
+
+# merge conflict files
+*.orig
+*BACKUP*
+*BASE*
+*LOCAL*
+*REMOTE*
+
+# Catkin custom files
+#CATKIN_IGNORE
+*.autosave
+.idea
+# bag and tar files
+*.bag
+*.tar
+
