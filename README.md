@@ -3,7 +3,8 @@
 Implementation of PatchMatch algorithm (CPU and GPU version) as a ROS service (still in progress)
 
 ## Related publications
-
+BibTeX:
+```
 @inproceedings{Barnes2009PatchMatchAR,
   title={PatchMatch: a randomized correspondence algorithm for structural image editing},
   author={Connelly Barnes and Eli Shechtman and Adam Finkelstein and Dan B. Goldman},
@@ -18,3 +19,4 @@ Implementation of PatchMatch algorithm (CPU and GPU version) as a ROS service (s
   year={2008},
   pages={1-8}
 }
+```
