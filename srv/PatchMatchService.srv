@@ -2,6 +2,7 @@ string source_file
 string target_file
 int8 patch_size
 int8 iters
+bool use_gpu
 ---
 string ann_file
 string annd_file
