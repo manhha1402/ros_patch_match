@@ -18,7 +18,7 @@ __device__ float cuRand(unsigned int * seed) {
 }
 
 
-__host__ __device__ float dist(const uchar *a,const uchar *b,const int a_cols, const int a_rows,
+__host__ __device__ float dist(const unsigned char *a,const unsigned char *b,const int a_cols, const int a_rows,
                                const int b_cols, const int b_rows, const int ax, const int ay,
                                const int bx, const int by,const int HALF_PATCH, float cutoff)
 {
@@ -50,13 +50,13 @@ __host__ __device__ float dist(const uchar *a,const uchar *b,const int a_cols, c
     }
 
 }
-__device__ void improve_guess(const uchar * a,const uchar * b,
-                              int a_cols, int a_rows,
-                              int b_cols, int b_rows,
-                              int ax, int ay, int &xbest,
-                              int &ybest, float &dbest, int xp, int yp, int HALF_PATCH) {
+__device__ void improveGuess(const unsigned char * a,const unsigned char * b,
+                             int a_cols, int a_rows,
+                             int b_cols, int b_rows,
+                             int ax, int ay, int &xbest,
+                             int &ybest, float &dbest, int xp, int yp, int half_patch_size) {
     float d = 0;
-    d = dist(a, b, a_cols, a_rows,b_cols,b_rows, ax, ay, xp, yp, HALF_PATCH, dbest);
+    d = dist(a, b, a_cols, a_rows,b_cols,b_rows, ax, ay, xp, yp, half_patch_size, dbest);
 
     if (d < dbest) {
         xbest = xp;
@@ -64,28 +64,27 @@ __device__ void improve_guess(const uchar * a,const uchar * b,
         dbest = d;
     }
 }
-__global__ void kernerPatchMatch(const uchar * a,const uchar * b,unsigned int * ann,float * annd,
-                                 const int a_cols, const int a_rows,const int b_cols, const int b_rows,
+__global__ void kernerPatchMatch(const unsigned char * source,const unsigned char * target,unsigned int * ann,float * annd,
+                                 const int s_cols, const int s_rows,const int t_cols, const int t_rows,
                                  const int iters,const int patch_size,const int rs_max )
 
 {
-    int ax = blockIdx.x*blockDim.x + threadIdx.x;
-    int ay = blockIdx.y*blockDim.y + threadIdx.y;
-    if (ax < a_cols && ay < a_rows) {
-
+    int sx = blockIdx.x*blockDim.x + threadIdx.x;
+    int sy = blockIdx.y*blockDim.y + threadIdx.y;
+    if (sx < s_cols && sy < s_rows) {
+        int half_patch_size = patch_size/2;
         // for random number
-        unsigned int seed = ay*a_cols + ax;
+        unsigned int seed = sy*s_cols + sx;
 
         for (int iter = 0; iter < iters; iter++) {
 
             /* Current (best) guess. */
-            unsigned int v = ann[ay*a_cols + ax];
+            unsigned int v = ann[sy*s_cols + sx];
             int xbest = INT_TO_X(v), ybest = INT_TO_Y(v);
-            float dbest = annd[ay*a_cols + ax];
+            float dbest = annd[sy*s_cols + sx];
 
             for (int jump = 8; jump > 0; jump /= 2) {
 
-                //jump = jump * iterDirection;
 
                 /* Propagation: Improve current guess by trying instead correspondences from left, right, up and downs. */
                 if ((ax - jump) < a_cols&&(ax - jump) >= 0)//left
@@ -95,7 +94,7 @@ __global__ void kernerPatchMatch(const uchar * a,const uchar * b,unsigned int * 
                     if (xp < b_cols && xp>=0)
                     {
                         //improve guress
-                        improve_guess(a, b, a_cols, a_rows, b_cols, b_rows, ax, ay, xbest, ybest, dbest, xp, yp, patch_w);
+                        improveGuess(a, b, a_cols, a_rows, b_cols, b_rows, ax, ay, xbest, ybest, dbest, xp, yp, half_patch_size);
 
                     }
                 }
@@ -110,7 +109,7 @@ __global__ void kernerPatchMatch(const uchar * a,const uchar * b,unsigned int * 
                     if (xp >= 0&&xp<b_cols)
                     {
                         //improve guress
-                        improve_guess(a, b, a_rows, a_cols, b_rows, b_cols, ax, ay, xbest, ybest, dbest, xp, yp, patch_w);
+                        improveGuess(a, b, a_rows, a_cols, b_rows, b_cols, ax, ay, xbest, ybest, dbest, xp, yp, half_patch_size);
                     }
                 }
 
@@ -124,7 +123,7 @@ __global__ void kernerPatchMatch(const uchar * a,const uchar * b,unsigned int * 
                     if (yp >= 0 && yp <b_rows)
                     {
                         //improve guress
-                        improve_guess(a, b, a_rows, a_cols, b_rows, b_cols, ax, ay, xbest, ybest, dbest, xp, yp, patch_w);
+                        improveGuess(a, b, a_rows, a_cols, b_rows, b_cols, ax, ay, xbest, ybest, dbest, xp, yp, half_patch_size);
                     }
                 }
 
@@ -138,7 +137,7 @@ __global__ void kernerPatchMatch(const uchar * a,const uchar * b,unsigned int * 
                     if (yp >= 0)
                     {
                         //improve guress
-                        improve_guess(a, b, a_rows, a_cols, b_rows, b_cols, ax, ay, xbest, ybest, dbest, xp, yp, patch_w);
+                        improveGuess(a, b, a_rows, a_cols, b_rows, b_cols, ax, ay, xbest, ybest, dbest, xp, yp, half_patch_size);
                     }
                 }
 
@@ -160,7 +159,7 @@ __global__ void kernerPatchMatch(const uchar * a,const uchar * b,unsigned int * 
                 int xp = xmin + (int)(cuRand(&seed)*(xmax - xmin)) % (xmax - xmin);
                 int yp = ymin + (int)(cuRand(&seed)*(ymax - ymin)) % (ymax - ymin);
 
-                improve_guess(a, b, a_rows, a_cols, b_rows, b_cols, ax, ay, xbest, ybest, dbest, xp, yp, patch_w);
+                improveGuess(a, b, a_rows, a_cols, b_rows, b_cols, ax, ay, xbest, ybest, dbest, xp, yp, half_patch_size);
 
             }
 
@@ -172,7 +171,7 @@ __global__ void kernerPatchMatch(const uchar * a,const uchar * b,unsigned int * 
     }
 }
 
-void patchMatch(const uchar * a,const uchar * b,unsigned int * ann,unsigned int * newann,
+void patchMatch(const unsigned char * a,const unsigned char * b,unsigned int * ann,unsigned int * newann,
                 float * annd,float * newannd,
                 const int a_cols, const int a_rows, const int b_cols,const int b_rows,
                 const int iters, const int patch_size,const int rs_max)

@@ -10,16 +10,6 @@
 #include "ros_patch_match/PatchMatchService.h"
 #include "ros_patch_match/cuda_functions.cuh"
 
-int max(int x, int y, int z) {
-    return std::max(std::max(x, y), z);
-}
-
-int min(int x, int y, int z){
-    return std::min(std::min(x, y), z);
-}
-int randomInt(int min, int max) {
-    return (int)(((double)rand()/(RAND_MAX+1.0)) * (max - min + 1) + min);
-}
 
 class PatchMatch
 {
@@ -35,14 +25,22 @@ public:
     void initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source, const cv::Mat& target,
                     const int patch_size);
     cv::Mat ann2image(const cv::Mat& ann);
+    ///
+    /// \brief reconstructImageCPU reconstruct source image from patches of target image
+    /// \param source original source image
+    /// \param target target image
+    /// \param ann approximate search
+    /// \return new source image
+    ///
     cv::Mat reconstructImageCPU(const cv::Mat& source, const cv::Mat& target,const cv::Mat& ann);
+    cv::Mat reconstructError(const cv::Mat& source,const cv::Mat target,const cv::Mat& ann);
 private:
     ros::NodeHandle node_;
     ros::ServiceServer service_;
-    float distance(const cv::Mat& source, const cv::Mat& target,const cv::Mat& mask,
+    float distance(const cv::Mat& source, const cv::Mat& target,
                    const int sx, const int sy,const int tx,const int ty,
                    const int half_patch_size, const float threshold);
-    void improveGuess(const cv::Mat& source,const cv::Mat& target,const cv::Mat& mask,
+    void improveGuess(const cv::Mat& source,const cv::Mat& target,
                       const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
                       int& tx_best, int& ty_best,float& dist_best);
 
@@ -56,50 +54,47 @@ PatchMatch::~PatchMatch()
 {
 }
 //TODOs
-float PatchMatch::distance(const cv::Mat& source, const cv::Mat& target,const cv::Mat& mask,
+float PatchMatch::distance(const cv::Mat& source, const cv::Mat& target,
                            const int sx, const int sy,const int tx,const int ty,
                            const int half_patch_size, const float threshold)
 {
-    // Do not use patches on boundaries
-    if (tx < half_patch_size || tx>= target.cols-half_patch_size ||
-            ty < half_patch_size || ty >= target.rows-half_patch_size) {
-        return HUGE_VAL;
-    }
+
     // Compute distance between 2 patches S, T
     // Average L2 distance in RGB space
-    float pixel_sum = 0, pixel_no = 0, pixel_dist=0;//number of pixels realy counted
+    float ans = 0, num = 0;
 
-    int x1 = max(-half_patch_size,-sx,-tx);
-    int x2 = min(half_patch_size, -sx+source.cols-1, -tx+target.cols-1);
-    int y1 = max(-half_patch_size, -sy, -ty);
-    int y2 = min(half_patch_size, -sy+source.rows-1, -ty+target.rows-1);
 
-    for (int y = y1;y <= y2; y++)
-        for (int x = x1; x<= x2; x++)
+    for (int y = -half_patch_size;y <= half_patch_size; y++)
+        for (int x = -half_patch_size; x<= half_patch_size; x++)
         {
-            cv::Vec3b color_source = source.at<cv::Vec3b>(sy+y,sx+x);
-            cv::Vec3b color_target = source.at<cv::Vec3b>(ty+y,tx+x);
-            int dr = std::abs(color_source.val[2] - color_target.val[2]);
-            int dg = std::abs(color_source.val[1] - color_target.val[1]);
-            int db = std::abs(color_source.val[0] - color_target.val[0]);
-            pixel_sum =  (float)(dr*dr + dg*dg + db*db);
-            pixel_no += 1;
-            // Early termination
-            //if (pixel_sum > threshold) {return HUGE_VAL;}
+            if (
+                    (sy + y) < source.rows && (sy + y) >= 0 && (sx + x) < source.cols && (sx + x) >= 0
+                    &&
+                    (ty + y) < target.rows && (ty + y) >= 0 && (tx + x) < target.cols && (tx + x) >= 0
+                    )//the pixel in source and target should exist
+            {
+                cv::Vec3b color_source = source.at<cv::Vec3b>(sy+y,sx+x);
+                cv::Vec3b color_target = target.at<cv::Vec3b>(ty+y,tx+x);
+                int dr = std::abs(color_source.val[2] - color_target.val[2]);
+                int dg = std::abs(color_source.val[1] - color_target.val[1]);
+                int db = std::abs(color_source.val[0] - color_target.val[0]);
+                ans +=  (float)(dr*dr + dg*dg + db*db);
+                num += 1;
+            }
 
         }
-    pixel_dist = pixel_sum / pixel_no;
-    if (pixel_dist >= threshold) { return threshold; }
+    ans = ans / num;
+    if (ans >= threshold) { return threshold; }
     else {
-        return pixel_dist;
+        return ans;
     }
 }
-void PatchMatch::improveGuess(const cv::Mat& source,const cv::Mat& target,const cv::Mat& mask,
-                  const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
-                  int& tx_best, int& ty_best,float& dist_best)
+void PatchMatch::improveGuess(const cv::Mat& source,const cv::Mat& target,
+                              const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
+                              int& tx_best, int& ty_best,float& dist_best)
 {
     float d = 0;
-    d = distance(source,target,mask,sx,sy,tx,ty,half_patch_size,dist_best);
+    d = distance(source,target,sx,sy,tx,ty,half_patch_size,dist_best);
     if (d < dist_best) {
         tx_best = tx;
         ty_best = ty;
@@ -112,12 +107,17 @@ cv::Mat PatchMatch::ann2image(const cv::Mat& ann)
 {
     cv::Mat img(ann.rows, ann.cols, CV_8UC3, cv::Scalar(0, 0, 0));
     cv::Rect rect(cv::Point(0, 0), ann.size());
+
+#pragma omp parallel for schedule(static)
     for (int r = 0; r < ann.rows; r++) {
         for (int c = 0; c < ann.cols; c++) {
-            img.at<cv::Vec3b>(r,c)[2] = int(ann.at<cv::Vec2i>(r,c)[0] * 255 / ann.cols);
-            img.at<cv::Vec3b>(r,c)[1] = int(ann.at<cv::Vec2i>(r,c)[1] * 255 / ann.rows);
-            img.at<cv::Vec3b>(r,c)[0] = 255 - std::max(img.at<cv::Vec3b>(r,c)[2],
-                    img.at<cv::Vec3b>(r,c)[1]);
+
+            int v = ann.at<int>(r,c);
+            int xbest = INT_TO_X(v);
+            int ybest = INT_TO_Y(v);
+            img.at<cv::Vec3b>(r,c)[2] = int(xbest * 255 / ann.cols);
+            img.at<cv::Vec3b>(r,c)[1] = int(ybest * 255 / ann.rows);
+            img.at<cv::Vec3b>(r,c)[0] = 255 - std::max(img.at<cv::Vec3b>(r,c)[2],img.at<cv::Vec3b>(r,c)[1]);
         }
     }
     return  img;
@@ -129,7 +129,7 @@ cv::Mat PatchMatch::ann2image(const cv::Mat& ann)
 void PatchMatch::initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source,
                             const cv::Mat& target, const int patch_size)
 {
-    ann.create(source.rows,source.cols,CV_32SC2);
+    ann.create(source.rows,source.cols,CV_32SC1);
     annd.create(source.rows,source.cols,CV_32FC1);
     // randomly initialize the nnf
     srand(time(NULL));
@@ -138,10 +138,10 @@ void PatchMatch::initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source,
     for (int sy = 0; sy < source.rows; sy++) {
         for(int sx = 0; sx < source.cols; sx++){
 
-            int tx = randomInt(half_patch_size, target.cols-half_patch_size-1);
-            int ty = randomInt(half_patch_size, target.rows-half_patch_size-1);
-            ann.at<cv::Vec2i>(sy,sx) = cv::Vec2i(tx,ty);
-            annd.at<float>(sy,sx) = distance(source,target,cv::Mat(),sx,sy,tx,ty,half_patch_size,HUGE_VAL);
+            int tx =  rand() % target.cols;
+            int ty =  rand() % target.rows;
+            ann.at<int>(sy,sx) = XY_TO_INT(tx,ty);
+            annd.at<float>(sy,sx) = distance(source,target,sx,sy,tx,ty,half_patch_size,INT_MAX);
         }
     }
 }
@@ -165,19 +165,66 @@ void PatchMatch::initAnnGPU(unsigned int *& ann, float *& annd, int aw, int ah,
 
 cv::Mat PatchMatch::reconstructImageCPU(const cv::Mat& source, const cv::Mat& target,const cv::Mat& ann)
 {
-    cv::Mat c;
-    source.copyTo(c);
+    cv::Mat source_recon;
+    source.copyTo(source_recon);
+#pragma omp parallel for schedule(static)
     for (int sy = 0; sy < source.rows; sy++) {
         for (int sx = 0; sx < source.cols; sx++)
         {
-            cv::Point p = ann.at<cv::Point>(sy,sx);
-            c.at<cv::Vec3b>(sy,sx) = target.at<cv::Vec3b>(p);
+
+            int p = ann.at<int>(sy,sx);
+            int xbest = INT_TO_X(p);
+            int ybest = INT_TO_Y(p);
+            cv::Vec3b bi = target.at<cv::Vec3b>(ybest, xbest);
+            source_recon.at<cv::Vec3b>(sy, sx).val[2] = bi.val[2];
+            source_recon.at<cv::Vec3b>(sy, sx).val[1] = bi.val[1];
+            source_recon.at<cv::Vec3b>(sy, sx).val[0] = bi.val[0];
         }
     }
-    return c;
+    return source_recon;
 }
 
+cv::Mat PatchMatch::reconstructError(const cv::Mat& source,const cv::Mat target,const cv::Mat& ann) {
+    cv::Mat c;
+    source.copyTo(c);
+    int * err, err_min=INT_MAX, err_max=0;
+    err = new int[source.rows*source.cols];
+#pragma omp parallel for schedule(static)
+    for (int sy = 0; sy < source.rows; sy++) {
+        for (int sx = 0; sx < source.cols; sx++)
+        {
+            int v = ann.at<int>(sy,sx);
+            int xbest = INT_TO_X(v);
+            int ybest = INT_TO_Y(v);
+            cv::Vec3b bi = target.at<cv::Vec3b>(ybest, xbest);
+            cv::Vec3b ai = source.at<cv::Vec3b>(sy, sx);
+            int err_0 = ai.val[0] - bi.val[0];
+            int err_1 = ai.val[1] - bi.val[1];
+            int err_2 = ai.val[2] - bi.val[2];
+            int error = err_0*err_0 + err_1*err_1 + err_2*err_2;
+            if (error<err_min)
+            {
+                err_min = error;
+            }
+            if (error>err_max)
+            {
+                err_max = error;
+            }
 
+        }
+    }
+#pragma omp parallel for schedule(static)
+    for (int sy = 0; sy < source.rows; sy++) {
+        for (int sx = 0; sx < source.cols; sx++)
+        {
+            c.at<cv::Vec3b>(sy, sx).val[1] = (uchar)255 * ((float)(err[sy*source.cols+sx]-err_min)/(err_max-err_min));
+            c.at<cv::Vec3b>(sy, sx).val[2] = 0;
+            c.at<cv::Vec3b>(sy, sx).val[0] = 0;
+        }
+    }
+
+    return c;
+}
 
 
 bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request& req,
@@ -189,151 +236,104 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
     //judge whether it is empty
     if (source.empty() || target.empty())
     {
-        ROS_WARN("PatchMatch::images cannot read!");
+        ROS_WARN("PatchMatch::patchMatchCallback image cannot be read!");
+        return false;
+    }
+    if(req.patch_size % 2 == 0)
+    {
+        ROS_WARN("PatchMatch::patchMatchCallback patch size must be odd !");
         return false;
     }
     ///CPU
     cv::Mat ann,annd;
-    int half_patch_size = req.patch_size/2;
+    int half_patch_size = req.patch_size/2; //should be odd
     if(bool(req.use_gpu)==0)
     {
         ROS_INFO("PatchMatch CPU Version");
         initAnnCPU(ann,annd,source,target,req.patch_size);
-
-        bool forward_search = true;
-        for(int i=0;i< req.iters;i++)
+        for(int iter=0;iter< req.iters;iter++)
         {
-            if(forward_search)
-            {
+            //Forward search: UP and LEFT
+            /* In each iteration, improve the NNF, by looping in scanline or reverse-scanline order. */
+            //UP AND LEFT for even iterations
+            int ystart = 0, yend = source.rows, ychange = 1;
+            int xstart = 0, xend = source.cols, xchange = 1;
+
+            //BELOW AND RIGHT for odd iterations
+            if (iter % 2 == 1) {
+                xstart = xend-1; xend = -1; xchange = -1;
+                ystart = yend-1; yend = -1; ychange = -1;
+            }
 #pragma omp parallel for schedule(static)
-                // Forward propagation - compare left, center and up
-                for (int sy = 1;sy < source.rows;sy++)
-                {
-                    for (int sx = 1;sx < source.cols;sx++)
-                    {
+            for (int sy = ystart; sy != yend; sy += ychange) {
+                for (int sx = xstart; sx != xend; sx += xchange) {
+                    /* Current (best) guess. */
+                    int v = ann.at<int>(sy,sx);
+                    int xbest = INT_TO_X(v), ybest = INT_TO_Y(v);
+                    float dbest = annd.at<float>(sy,sx);
+                    // Propagation: Improve current guess by trying instead correspondences from left and up (even iteration)
+                    if ((unsigned)(sx - xchange) < (unsigned)source.cols && (sx - xchange) >= 0) {
 
-                        if(annd.at<float>(sy,sx)>0)
-                        {
-                            int &tx_best = ann.at<cv::Vec2i>(sy,sx)[0];
-                            int &ty_best = ann.at<cv::Vec2i>(sy,sx)[1];
-                            float& dist_best = annd.at<float>(sy,sx);
-                            //LEFT
-                            int tx_left = ann.at<cv::Vec2i>(sy,sx-1)[0] + 1;
-                            int ty_left = ann.at<cv::Vec2i>(sy,sx-1)[1];
-
-                            improveGuess(source,target,cv::Mat(),sx,sy,tx_left,ty_left,half_patch_size,
-                                         tx_best,ty_best,dist_best);
-                            //UP
-                            int tx_up = ann.at<cv::Vec2i>(sy-1,sx)[0];
-                            int ty_up = ann.at<cv::Vec2i>(sy-1,sx)[1]+1;
-                            improveGuess(source,target,cv::Mat(),sx,sy,tx_up,ty_up,half_patch_size,
-                                         tx_best,ty_best,dist_best);
+                        int vp = ann.at<int>(sy,sx - xchange);
+                        int tx = INT_TO_X(vp) + xchange, ty = INT_TO_Y(vp);
+                        if ((unsigned)tx < (unsigned)target.cols) {
+                            improveGuess(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
                         }
                     }
-                }
-            }
-            else {
-#pragma omp parallel for schedule(static)
-                // Backward propagation - compare right, center and down
-                for (int sy = source.rows-2 ;sy >=0 ; sy--)
-                {
-                    for (int sx = source.cols - 2;sx >= 0; sx--)
-                    {
-                        if(annd.at<float>(sy,sx)>0)
-                        {
-                            int &tx_best = ann.at<cv::Vec2i>(sy,sx)[0];
-                            int &ty_best = ann.at<cv::Vec2i>(sy,sx)[1];
-                            float& dist_best = annd.at<float>(sy,sx);
-
-                            //RIGHT
-                            int tx_right = ann.at<cv::Vec2i>(sy,sx+1)[0] - 1;
-                            int ty_right = ann.at<cv::Vec2i>(sy,sx+1)[1];
-                            improveGuess(source,target,cv::Mat(),sx,sy,tx_right,ty_right,half_patch_size,
-                                         tx_best,ty_best,dist_best);
-                            //DOWN
-                            int tx_down = ann.at<cv::Vec2i>(sy+1,sx)[0];
-                            int ty_down = ann.at<cv::Vec2i>(sy+1,sx)[1]-1;
-                            improveGuess(source,target,cv::Mat(),sx,sy,tx_down,ty_down,half_patch_size,
-                                         tx_best,ty_best,dist_best);
+                    //Propagation: below and right on odd iterations.
+                    if ((unsigned)(sy - ychange) < (unsigned)source.rows && (sy - ychange) >= 0) {
+                        int vp = ann.at<int>(sy-ychange,sx);
+                        int tx = INT_TO_X(vp), ty = INT_TO_Y(vp) + ychange;
+                        if ((unsigned)ty < (unsigned)target.rows) {
+                            improveGuess(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
                         }
                     }
-                }
-            }
-
-            forward_search = !forward_search;
-#pragma omp parallel for schedule(static)
-            //Random search
-            for (int sy = 0;sy < source.rows;sy++)
-            {
-                for (int sx = 0;sx < source.cols;sx++)
-                {
-                    if(annd.at<float>(sy,sx)>0)
-                    {
-                        //get high dimension as radius
-                        int radius = target.cols > target.rows ? target.cols : target.rows;
-
-                        // search an exponentially smaller window each iteration
-                        while (radius > 8) {
-                            // Search around current offset vector (distance-weighted)
-
-                            // clamp the search window to the image
-                            int min_tx = ann.at<cv::Vec2i>(sy,sx)[0] - radius;
-                            int max_tx = ann.at<cv::Vec2i>(sy,sx)[0] + radius+1;
-
-                            int min_ty = ann.at<cv::Vec2i>(sy,sx)[1] - radius;
-                            int max_ty = ann.at<cv::Vec2i>(sy,sx)[1] + radius+1;
-
-                            if (min_tx < 0) { min_tx = 0; }
-                            if (max_tx > target.cols) { max_tx = target.cols; }
-                            if (min_ty < 0) { min_ty = 0; }
-                            if (max_ty > target.rows) { max_ty = target.rows; }
-
-                            int rand_x = randomInt(min_tx,max_tx-1);
-                            int rand_y = randomInt(min_ty,max_ty-1);
-
-                            int &tx_best = ann.at<cv::Vec2i>(sy,sx)[0];
-                            int &ty_best = ann.at<cv::Vec2i>(sy,sx)[1];
-                            float& dist_best = annd.at<float>(sy,sx);
-
-                            improveGuess(source,target,cv::Mat(),sx,sy,rand_x,rand_y,half_patch_size,
-                                         tx_best,ty_best,dist_best);
-                            radius >>=1;
-                        }
-
+                    /* Random search: Improve current guess by searching in boxes of exponentially decreasing size around the current best guess. */
+                    int rs_start = INT_MAX;
+                    if (rs_start > MAX(target.cols, target.rows))
+                    { rs_start = MAX(target.cols, target.rows); }
+                    for (int mag = rs_start; mag >= 1; mag /= 2) {
+                        /* Sampling window */
+                        int xmin = MAX(xbest - mag, 0), xmax = MIN(xbest + mag + 1, target.cols);
+                        int ymin = MAX(ybest - mag, 0), ymax = MIN(ybest + mag + 1, target.rows);
+                        int tx = xmin + rand() % (xmax - xmin);
+                        int ty = ymin + rand() % (ymax - ymin);
+                        improveGuess(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
                     }
+                    ann.at<int>(sy,sx) = XY_TO_INT(xbest, ybest);
+                    annd.at<float>(sy,sx) = dbest;
                 }
             }
-
         }
-
-        annd.convertTo(annd,CV_16UC1,1000);
-        cv::imwrite("annd.png",annd);
-        cv::Mat ann_img = ann2image(ann);
-        cv::imwrite("ann.png",ann_img);
-        cv::Mat reconstruction = reconstructImageCPU(source,target,ann);
-        cv::imwrite("reconstruction.png",reconstruction);
+        cv::Mat reconstructed_image = reconstructImageCPU(source,target,ann);
+        cv::Mat error_map = reconstructError(source,target,ann);
+        cv::Mat ann_map = ann2image(ann);
+        cv::imwrite("reconstructed_image.png",reconstructed_image);
+        cv::imwrite("error_map.png",error_map);
+        cv::imwrite("ann_map.png",ann_map);
     }
-    /* GPU
-    unsigned char *source_device, *target_device;
-    int *params_host, *params_device;
+    else
+    {
+        ROS_INFO("PatchMatch GPU Version");
+        unsigned char *source_device, *target_device;
+        int *params_host, *params_device;
+        const int patch_w = 3;
+        int pm_iters = 5;
+        int sizeOfParams = 7;
 
 
-    const int patch_w = 3;
-    int pm_iters = 5;
-    int sizeOfParams = 7;
-    int rs_max = INT_MAX;
-    int sizeOfAnn;
+        //convert cvMat to array
+        unsigned char *source_host = source.isContinuous()? source.data: source.clone().data;
+        unsigned char *target_host = target.isContinuous()? target.data: target.clone().data;
 
-    //convert cvMat to array
-    unsigned char *source_host = source.isContinuous()? source.data: source.clone().data;
-    unsigned char *target_host = target.isContinuous()? target.data: target.clone().data;
+        //initialization
+        unsigned int *ann_host = (unsigned int *)malloc(source.cols*source.rows * sizeof(unsigned int));
+        float *annd_host = (float *)malloc(source.cols*source.rows * sizeof(float));
+        unsigned int *new_ann = (unsigned int *)malloc(source.cols*source.rows * sizeof(unsigned int));
+        float *new_annd = (float *)malloc(source.cols*source.rows * sizeof(float));
 
-    //initialization
-    unsigned int *ann_host = (unsigned int *)malloc(source.cols*source.rows * sizeof(unsigned int));
-    float *annd_host = (float *)malloc(source.cols*source.rows * sizeof(float));
-    unsigned int *newann = (unsigned int *)malloc(source.cols*source.rows * sizeof(unsigned int));
-    float *newannd = (float *)malloc(source.cols*source.rows * sizeof(float));
-    */
+    }
+
     ROS_INFO("PatchMatch succeeded !");
     return  true;
 }

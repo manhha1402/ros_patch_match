@@ -95,6 +95,16 @@ static inline __host__ __device__ int cuMin(int a, int b) {
         return b;
     }
 }
+static inline __host__ __device__ int max(int x, int y, int z) {
+    return std::max(std::max(x, y), z);
+}
+
+static inline __host__ __device__ int min(int x, int y, int z){
+    return std::min(std::min(x, y), z);
+}
+static inline __host__ __device__ int randomInt(int min, int max) {
+    return (int)(((double)rand()/(RAND_MAX+1.0)) * (max - min + 1) + min);
+}
 
 
 
