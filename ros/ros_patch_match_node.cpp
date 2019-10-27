@@ -22,7 +22,6 @@ public:
     void initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source, const cv::Mat& target,
                     const int patch_size);
     cv::Mat ann2imageCPU(const cv::Mat& ann);
-    cv::Mat ann2imageGPU(const std::map<int, int>& best_guess, const int cols, const int rows);
     ///
     /// \brief reconstructImageCPU reconstruct source image from patches of target image
     /// \param source original source image

@@ -195,22 +195,7 @@ __host__ void initAnn(int * source,int * target,unsigned int *& ann,
         }
     }
 }
-/* center voting */
-__host__ cv::Mat reconstruct(cv::Mat source, cv::Mat target, unsigned int * ann)
-{
-    cv::Mat c;
-    source.copyTo(c);
-    for (int sy = 0; sy < source.rows; sy++) {
-        for (int sx = 0; sx < source.cols; sx++)
-        {
-            unsigned int v = ann[sy*source.cols + sx];
-            int txbest = INT_TO_X(v);
-            int tybest = INT_TO_Y(v);
-            c.at<cv::Vec3b>(sy, sx) = target.at<cv::Vec3b>(tybest, txbest);
-        }
-    }
-    return c;
-}
+
 
 void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters, const int patch_size,
                     cv::Mat& cvMatann, cv::Mat& cvMatannd,cv::Mat& reconstructed_image)

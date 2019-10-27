@@ -60,7 +60,3 @@ add_executable(${PROJECT_NAME}_node ros/ros_patch_match_node.cpp)
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS})
 target_link_libraries(${PROJECT_NAME}_node CUDA_SRCS  ${catkin_LIBRARIES})
 
-
-#add_executable(function_test ros/function_test.cpp)
-#target_link_libraries(function_test ${CUDA_LIBRARIES} ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
-
