@@ -3,6 +3,8 @@ string target_file
 int8 patch_size
 int8 iters
 bool use_gpu
----
 string ann_file
 string annd_file
+string reconstructed_image_file
+---
+bool success

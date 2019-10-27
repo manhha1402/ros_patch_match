@@ -1,6 +1,14 @@
 # ros_patch_match
 
-Implementation of PatchMatch algorithm (CPU and GPU version) as a ROS service (still in progress)
+Implementation of PatchMatch algorithm (CPU and GPU version) as a ROS service. The GPU version is much faster than CPU version
+
+Usage:
+
+1. Run ROS master: `roscore`.
+2. Start ROS PatchMatch service: `rosrun ros_patch_match ros_patch_match_node`.
+3. Call service from client. The parameters of service client are explained in the `srv` folder.
+
+The output is reconstructed image nad ann image from the PatchMatch algorithm.
 
 ## Related publications
 BibTeX:

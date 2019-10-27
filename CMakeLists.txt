@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(ros_patch_match)
 add_compile_options(-std=c++14)
+find_package(OpenMP)
+if (OPENMP_FOUND)
+    MESSAGE("OpenMP DIR : ${OpenMP_DIR}")
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+endif()
+
 
 set(catkin_RUN_PACKAGES
     message_generation
@@ -45,7 +53,14 @@ include_directories(
     ${CUDA_INCLUDE_DIRS}
 )
 
+file(GLOB CUDA_SRCS "${PROJECT_SOURCE_DIR}/common/src/cuda/*.cu")
+CUDA_ADD_LIBRARY(CUDA_SRCS "${CUDA_SRCS}")
+target_link_libraries(CUDA_SRCS ${CUDA_LIBRARIES} ${OpenCV_LIBRARIES})
 add_executable(${PROJECT_NAME}_node ros/ros_patch_match_node.cpp)
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME}_node ${CUDA_LIBRARIES} ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME}_node CUDA_SRCS  ${catkin_LIBRARIES})
+
+
+#add_executable(function_test ros/function_test.cpp)
+#target_link_libraries(function_test ${CUDA_LIBRARIES} ${OpenCV_LIBRARIES} ${catkin_LIBRARIES})
 

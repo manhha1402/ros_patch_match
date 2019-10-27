@@ -10,7 +10,6 @@
 #include "ros_patch_match/PatchMatchService.h"
 #include "ros_patch_match/cuda_functions.cuh"
 
-
 class PatchMatch
 {
 public:
@@ -19,12 +18,11 @@ public:
     virtual ~PatchMatch();
     bool patchMatchCallback(ros_patch_match::PatchMatchService::Request& req,
                             ros_patch_match::PatchMatchService::Response& res);
-    void initAnnGPU(unsigned int *& ann, float *& annd, int aw, int ah,
-                    int bw, int bh, int a_cols, int a_rows, int b_cols, int b_rows,
-                    const unsigned char * a,const unsigned char * b, int patch_size);
+
     void initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source, const cv::Mat& target,
                     const int patch_size);
-    cv::Mat ann2image(const cv::Mat& ann);
+    cv::Mat ann2imageCPU(const cv::Mat& ann);
+    cv::Mat ann2imageGPU(const std::map<int, int>& best_guess, const int cols, const int rows);
     ///
     /// \brief reconstructImageCPU reconstruct source image from patches of target image
     /// \param source original source image
@@ -40,9 +38,11 @@ private:
     float distance(const cv::Mat& source, const cv::Mat& target,
                    const int sx, const int sy,const int tx,const int ty,
                    const int half_patch_size, const float threshold);
-    void improveGuess(const cv::Mat& source,const cv::Mat& target,
+    void compareDistance(const cv::Mat& source,const cv::Mat& target,
                       const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
                       int& tx_best, int& ty_best,float& dist_best);
+
+
 
 
 };
@@ -53,6 +53,9 @@ PatchMatch::PatchMatch(ros::NodeHandle& node):node_(node)
 PatchMatch::~PatchMatch()
 {
 }
+
+
+
 //TODOs
 float PatchMatch::distance(const cv::Mat& source, const cv::Mat& target,
                            const int sx, const int sy,const int tx,const int ty,
@@ -62,8 +65,6 @@ float PatchMatch::distance(const cv::Mat& source, const cv::Mat& target,
     // Compute distance between 2 patches S, T
     // Average L2 distance in RGB space
     float ans = 0, num = 0;
-
-
     for (int y = -half_patch_size;y <= half_patch_size; y++)
         for (int x = -half_patch_size; x<= half_patch_size; x++)
         {
@@ -78,7 +79,7 @@ float PatchMatch::distance(const cv::Mat& source, const cv::Mat& target,
                 int dr = std::abs(color_source.val[2] - color_target.val[2]);
                 int dg = std::abs(color_source.val[1] - color_target.val[1]);
                 int db = std::abs(color_source.val[0] - color_target.val[0]);
-                ans +=  (float)(dr*dr + dg*dg + db*db);
+                ans +=   static_cast<float>((dr*dr + dg*dg + db*db));
                 num += 1;
             }
 
@@ -89,7 +90,7 @@ float PatchMatch::distance(const cv::Mat& source, const cv::Mat& target,
         return ans;
     }
 }
-void PatchMatch::improveGuess(const cv::Mat& source,const cv::Mat& target,
+void PatchMatch::compareDistance(const cv::Mat& source,const cv::Mat& target,
                               const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
                               int& tx_best, int& ty_best,float& dist_best)
 {
@@ -103,10 +104,9 @@ void PatchMatch::improveGuess(const cv::Mat& source,const cv::Mat& target,
 }
 
 
-cv::Mat PatchMatch::ann2image(const cv::Mat& ann)
+cv::Mat PatchMatch::ann2imageCPU(const cv::Mat& ann)
 {
     cv::Mat img(ann.rows, ann.cols, CV_8UC3, cv::Scalar(0, 0, 0));
-    cv::Rect rect(cv::Point(0, 0), ann.size());
 
 #pragma omp parallel for schedule(static)
     for (int r = 0; r < ann.rows; r++) {
@@ -115,8 +115,8 @@ cv::Mat PatchMatch::ann2image(const cv::Mat& ann)
             int v = ann.at<int>(r,c);
             int xbest = INT_TO_X(v);
             int ybest = INT_TO_Y(v);
-            img.at<cv::Vec3b>(r,c)[2] = int(xbest * 255 / ann.cols);
-            img.at<cv::Vec3b>(r,c)[1] = int(ybest * 255 / ann.rows);
+            img.at<cv::Vec3b>(r,c)[2] = static_cast<unsigned char>(xbest * 255 / ann.cols);
+            img.at<cv::Vec3b>(r,c)[1] = static_cast<unsigned char>(ybest * 255 / ann.rows);
             img.at<cv::Vec3b>(r,c)[0] = 255 - std::max(img.at<cv::Vec3b>(r,c)[2],img.at<cv::Vec3b>(r,c)[1]);
         }
     }
@@ -125,14 +125,11 @@ cv::Mat PatchMatch::ann2image(const cv::Mat& ann)
 
 
 
-
 void PatchMatch::initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source,
                             const cv::Mat& target, const int patch_size)
 {
     ann.create(source.rows,source.cols,CV_32SC1);
     annd.create(source.rows,source.cols,CV_32FC1);
-    // randomly initialize the nnf
-    srand(time(NULL));
     int half_patch_size = patch_size/2;
 #pragma omp parallel for schedule(static)
     for (int sy = 0; sy < source.rows; sy++) {
@@ -145,23 +142,7 @@ void PatchMatch::initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source,
         }
     }
 }
-void PatchMatch::initAnnGPU(unsigned int *& ann, float *& annd, int aw, int ah,
-                            int bw, int bh, int a_cols, int a_rows, int b_cols, int b_rows,
-                            const unsigned char * a,const unsigned char * b,int patch_size)
-{
 
-#pragma omp parallel for schedule(static)
-    for (int ay = 0; ay < a_rows; ay++) {
-        for (int ax = 0; ax < a_cols; ax++) {
-            int bx = rand() % b_cols;
-            int by = rand() % b_rows;
-
-            ann[ay*a_cols + ax] = XY_TO_INT(bx, by);
-            //annd[ay*a_cols + ax] = Cuda::dist(a, b,);
-
-        }
-    }
-}
 
 cv::Mat PatchMatch::reconstructImageCPU(const cv::Mat& source, const cv::Mat& target,const cv::Mat& ann)
 {
@@ -230,7 +211,6 @@ cv::Mat PatchMatch::reconstructError(const cv::Mat& source,const cv::Mat target,
 bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request& req,
                                     ros_patch_match::PatchMatchService::Response& res)
 {
-
     cv::Mat source = cv::imread(req.source_file);
     cv::Mat target = cv::imread(req.target_file);
     //judge whether it is empty
@@ -247,10 +227,13 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
     ///CPU
     cv::Mat ann,annd;
     int half_patch_size = req.patch_size/2; //should be odd
+
     if(bool(req.use_gpu)==0)
     {
         ROS_INFO("PatchMatch CPU Version");
+        auto start=std::chrono::system_clock::now();
         initAnnCPU(ann,annd,source,target,req.patch_size);
+#pragma omp parallel for schedule(static)
         for(int iter=0;iter< req.iters;iter++)
         {
             //Forward search: UP and LEFT
@@ -264,7 +247,7 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
                 xstart = xend-1; xend = -1; xchange = -1;
                 ystart = yend-1; yend = -1; ychange = -1;
             }
-#pragma omp parallel for schedule(static)
+
             for (int sy = ystart; sy != yend; sy += ychange) {
                 for (int sx = xstart; sx != xend; sx += xchange) {
                     /* Current (best) guess. */
@@ -277,7 +260,7 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
                         int vp = ann.at<int>(sy,sx - xchange);
                         int tx = INT_TO_X(vp) + xchange, ty = INT_TO_Y(vp);
                         if ((unsigned)tx < (unsigned)target.cols) {
-                            improveGuess(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
+                            compareDistance(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
                         }
                     }
                     //Propagation: below and right on odd iterations.
@@ -285,7 +268,7 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
                         int vp = ann.at<int>(sy-ychange,sx);
                         int tx = INT_TO_X(vp), ty = INT_TO_Y(vp) + ychange;
                         if ((unsigned)ty < (unsigned)target.rows) {
-                            improveGuess(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
+                            compareDistance(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
                         }
                     }
                     /* Random search: Improve current guess by searching in boxes of exponentially decreasing size around the current best guess. */
@@ -298,7 +281,7 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
                         int ymin = MAX(ybest - mag, 0), ymax = MIN(ybest + mag + 1, target.rows);
                         int tx = xmin + rand() % (xmax - xmin);
                         int ty = ymin + rand() % (ymax - ymin);
-                        improveGuess(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
+                        compareDistance(source, target,sx,sy,tx,ty,half_patch_size,xbest,ybest,dbest);
                     }
                     ann.at<int>(sy,sx) = XY_TO_INT(xbest, ybest);
                     annd.at<float>(sy,sx) = dbest;
@@ -306,36 +289,34 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
             }
         }
         cv::Mat reconstructed_image = reconstructImageCPU(source,target,ann);
-        cv::Mat error_map = reconstructError(source,target,ann);
-        cv::Mat ann_map = ann2image(ann);
-        cv::imwrite("reconstructed_image.png",reconstructed_image);
-        cv::imwrite("error_map.png",error_map);
-        cv::imwrite("ann_map.png",ann_map);
+        //cv::Mat error_map = reconstructError(source,target,ann);
+        cv::Mat ann_map = ann2imageCPU(ann);
+        cv::imwrite(req.reconstructed_image_file+"cpu_reconstructed_image.png",reconstructed_image);
+        //cv::imwrite("error_map.png",error_map);
+        cv::imwrite(req.ann_file+"cpu_ann_map.png",ann_map);
+        auto now=std::chrono::system_clock::now();
+        std::chrono::duration<double> diff = now-start; //in seconds
+        std::cout << "PatchMatch CPU version time: "<<diff.count()<<" seconds"<<std::endl;;
     }
     else
     {
         ROS_INFO("PatchMatch GPU Version");
-        unsigned char *source_device, *target_device;
-        int *params_host, *params_device;
-        const int patch_w = 3;
-        int pm_iters = 5;
-        int sizeOfParams = 7;
+        auto start=std::chrono::system_clock::now();
 
-
-        //convert cvMat to array
-        unsigned char *source_host = source.isContinuous()? source.data: source.clone().data;
-        unsigned char *target_host = target.isContinuous()? target.data: target.clone().data;
-
-        //initialization
-        unsigned int *ann_host = (unsigned int *)malloc(source.cols*source.rows * sizeof(unsigned int));
-        float *annd_host = (float *)malloc(source.cols*source.rows * sizeof(float));
-        unsigned int *new_ann = (unsigned int *)malloc(source.cols*source.rows * sizeof(unsigned int));
-        float *new_annd = (float *)malloc(source.cols*source.rows * sizeof(float));
+        cv::Mat ann_map,annd_map,reconstructed_image;
+        source.copyTo(reconstructed_image);
+        Cuda::hostPatchMatch(source,target,req.patch_size,req.iters,ann_map,annd_map,reconstructed_image);
+        cv::imwrite(req.ann_file+"gpu_ann_map.png",ann_map);
+        cv::imwrite(req.reconstructed_image_file+"gpu_reconstructed_image.png",reconstructed_image);
+        auto now=std::chrono::system_clock::now();
+        std::chrono::duration<double> diff = now-start; //in seconds
+        std::cout << "PatchMatch GPU version time: "<<diff.count()<<" seconds"<<std::endl;;
 
     }
 
     ROS_INFO("PatchMatch succeeded !");
-    return  true;
+    res.success = true;
+    return  res.success;
 }
 
 
