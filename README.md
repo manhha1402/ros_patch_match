@@ -8,7 +8,7 @@ Usage:
 2. Start ROS PatchMatch service: `rosrun ros_patch_match ros_patch_match_node`.
 3. Call service from client. The parameters of service client are explained in the `srv` folder.
 
-The output is reconstructed image nad ann image from the PatchMatch algorithm.
+The output is `reconstructed_image` and `ann_image` from the PatchMatch algorithm.
 
 ## Related publications
 BibTeX:
