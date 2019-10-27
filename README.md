@@ -4,9 +4,9 @@ Implementation of PatchMatch algorithm (CPU and GPU version) as a ROS service. T
 
 Usage:
 
-1. Run ROS master: `roscore`.
-2. Start ROS PatchMatch service: `rosrun ros_patch_match ros_patch_match_node`.
-3. Call service from client. The parameters of service client are explained in the `srv` folder.
+1. Run ROS master: `roscore`
+2. Start ROS PatchMatch service: `rosrun ros_patch_match ros_patch_match_node`
+3. Call service from client. The parameters of service client are explained in the `srv` folder
 
 The output is `reconstructed_image` and `ann_image` from the PatchMatch algorithm.
 
