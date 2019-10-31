@@ -15,6 +15,8 @@ __device__ float cuRand(unsigned int * seed) {
     *seed = (unsigned int)x;
     return ((float)x / m);
 }
+//L2 distance of RGB space between source patch and target patch
+
 __host__ __device__ float distance(int * source, int * target, int s_rows, int s_cols, int t_rows, int t_cols,
                                int sx, int sy, int tx, int ty, int patch_size, float cutoff = INT_MAX) {
     // patch_size is an odd number
@@ -42,6 +44,8 @@ __host__ __device__ float distance(int * source, int * target, int s_rows, int s
         return ans;
     }
 }
+//compare L2 distance of current best match and current match, replace current best match if distance is smaller
+
 __device__ void compareDistance(int * source, int * target, int s_rows, int s_cols, int t_rows, int t_cols,
                               int sx, int sy, int &txbest, int &tybest, float &dbest, int xp, int yp, int patch_size) {
     float d = 0;
@@ -76,7 +80,6 @@ __global__ void kernelPatchMatch(int * source, int * target, unsigned int *ann, 
 
             for (int jump = 8; jump > 0; jump /= 2) {
 
-                //jump = jump * iterDirection;
 
                 /* Propagation: Improve current guess by trying instead correspondences from left, right, up and downs. */
                 if ((sx - jump) < s_cols&&(sx - jump) >= 0)//left
@@ -85,7 +88,7 @@ __global__ void kernelPatchMatch(int * source, int * target, unsigned int *ann, 
                     int xp = INT_TO_X(vp) + jump, yp = INT_TO_Y(vp);//the propagated match from vp
                     if (xp < t_cols && xp>=0)
                     {
-                        //improve guress
+
                         compareDistance(source, target, s_rows, s_cols, t_rows, t_cols, sx, sy, txbest, tybest, dbest, xp, yp, patch_size);
 
                     }
@@ -100,7 +103,7 @@ __global__ void kernelPatchMatch(int * source, int * target, unsigned int *ann, 
                     int xp = INT_TO_X(vp) - jump, yp = INT_TO_Y(vp);
                     if (xp >= 0&&xp<t_cols)
                     {
-                        //improve guress
+
                         compareDistance(source, target, s_rows, s_cols, t_rows, t_cols, sx, sy, txbest, tybest, dbest, xp, yp, patch_size);
                     }
                 }
@@ -114,7 +117,7 @@ __global__ void kernelPatchMatch(int * source, int * target, unsigned int *ann, 
                     int xp = INT_TO_X(vp), yp = INT_TO_Y(vp) + jump;
                     if (yp >= 0 && yp <t_rows)
                     {
-                        //improve guress
+
                         compareDistance(source, target, s_rows, s_cols, t_rows, t_cols, sx, sy, txbest, tybest, dbest, xp, yp, patch_size);
                     }
                 }
@@ -128,7 +131,7 @@ __global__ void kernelPatchMatch(int * source, int * target, unsigned int *ann, 
                     int xp = INT_TO_X(vp), yp = INT_TO_Y(vp) - jump;
                     if (yp >= 0)
                     {
-                        //improve guress
+
                         compareDistance(source, target, s_rows, s_cols, t_rows, t_cols, sx, sy, txbest, tybest, dbest, xp, yp, patch_size);
                     }
                 }
@@ -183,7 +186,7 @@ __host__ void initAnn(int * source,int * target,unsigned int *& ann,
                 float *& annd, int s_cols, int s_rows,
                 int t_cols, int t_rows,int patch_size)
 {
-//#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static)
     for (int sy = 0; sy < s_rows; sy++) {
         for (int sx = 0; sx < s_cols; sx++) {
             int tx = rand() % t_cols;
@@ -247,7 +250,10 @@ void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters
     cudaMemcpy(ann_final_host, ann_device, size_of_ann * sizeof(unsigned int), cudaMemcpyDeviceToHost);
     cudaMemcpy(annd_final_host, annd_device, size_of_ann * sizeof(float), cudaMemcpyDeviceToHost);
 
-    cvMatann.create(source.rows, source.cols, CV_8UC3);
+    //generate reconstructed, ann, annd images for visualization
+    cvMatann.create(source.rows,source.cols, CV_8UC3);
+    cvMatannd.create(source.rows,source.cols,CV_32FC1);
+    reconstructed_image.create(source.rows,source.cols, CV_8UC3);
     for (int r = 0; r < source.rows; r++) {
         for (int c = 0; c < source.cols; c++) {
 
@@ -259,8 +265,10 @@ void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters
             cvMatann.at<cv::Vec3b>(r,c)[0] = 255 - std::max(cvMatann.at<cv::Vec3b>(r,c)[2],
                                             cvMatann.at<cv::Vec3b>(r,c)[1]);
             reconstructed_image.at<cv::Vec3b>(r, c) = target.at<cv::Vec3b>(tybest, txbest);
+            cvMatannd.at<float>(r,c) = annd_final_host[r*source.cols+c];
         }
     }
+
 
     cudaFree(target_device);
     cudaFree(source_device);

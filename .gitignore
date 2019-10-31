@@ -41,3 +41,5 @@ qtcreator-*
 *.bag
 *.tar
 
+*.ply
+*.txt

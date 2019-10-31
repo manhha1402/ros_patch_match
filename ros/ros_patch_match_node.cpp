@@ -30,16 +30,17 @@ public:
     /// \return new source image
     ///
     cv::Mat reconstructImageCPU(const cv::Mat& source, const cv::Mat& target,const cv::Mat& ann);
-    cv::Mat reconstructError(const cv::Mat& source,const cv::Mat target,const cv::Mat& ann);
 private:
     ros::NodeHandle node_;
     ros::ServiceServer service_;
+    //L2 distance of RGB space between source patch and target patch
     float distance(const cv::Mat& source, const cv::Mat& target,
                    const int sx, const int sy,const int tx,const int ty,
                    const int half_patch_size, const float threshold);
+    //compare L2 distance of current best match and current match, replace current best match if distance is smaller
     void compareDistance(const cv::Mat& source,const cv::Mat& target,
-                      const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
-                      int& tx_best, int& ty_best,float& dist_best);
+                         const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
+                         int& tx_best, int& ty_best,float& dist_best);
 
 
 
@@ -90,8 +91,8 @@ float PatchMatch::distance(const cv::Mat& source, const cv::Mat& target,
     }
 }
 void PatchMatch::compareDistance(const cv::Mat& source,const cv::Mat& target,
-                              const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
-                              int& tx_best, int& ty_best,float& dist_best)
+                                 const int sx,const int sy,const int tx,const int ty,const int half_patch_size,
+                                 int& tx_best, int& ty_best,float& dist_best)
 {
     float d = 0;
     d = distance(source,target,sx,sy,tx,ty,half_patch_size,dist_best);
@@ -146,7 +147,6 @@ void PatchMatch::initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source,
 cv::Mat PatchMatch::reconstructImageCPU(const cv::Mat& source, const cv::Mat& target,const cv::Mat& ann)
 {
     cv::Mat source_recon;
-    source.copyTo(source_recon);
 #pragma omp parallel for schedule(static)
     for (int sy = 0; sy < source.rows; sy++) {
         for (int sx = 0; sx < source.cols; sx++)
@@ -164,47 +164,6 @@ cv::Mat PatchMatch::reconstructImageCPU(const cv::Mat& source, const cv::Mat& ta
     return source_recon;
 }
 
-cv::Mat PatchMatch::reconstructError(const cv::Mat& source,const cv::Mat target,const cv::Mat& ann) {
-    cv::Mat c;
-    source.copyTo(c);
-    int * err, err_min=INT_MAX, err_max=0;
-    err = new int[source.rows*source.cols];
-#pragma omp parallel for schedule(static)
-    for (int sy = 0; sy < source.rows; sy++) {
-        for (int sx = 0; sx < source.cols; sx++)
-        {
-            int v = ann.at<int>(sy,sx);
-            int xbest = INT_TO_X(v);
-            int ybest = INT_TO_Y(v);
-            cv::Vec3b bi = target.at<cv::Vec3b>(ybest, xbest);
-            cv::Vec3b ai = source.at<cv::Vec3b>(sy, sx);
-            int err_0 = ai.val[0] - bi.val[0];
-            int err_1 = ai.val[1] - bi.val[1];
-            int err_2 = ai.val[2] - bi.val[2];
-            int error = err_0*err_0 + err_1*err_1 + err_2*err_2;
-            if (error<err_min)
-            {
-                err_min = error;
-            }
-            if (error>err_max)
-            {
-                err_max = error;
-            }
-
-        }
-    }
-#pragma omp parallel for schedule(static)
-    for (int sy = 0; sy < source.rows; sy++) {
-        for (int sx = 0; sx < source.cols; sx++)
-        {
-            c.at<cv::Vec3b>(sy, sx).val[1] = (uchar)255 * ((float)(err[sy*source.cols+sx]-err_min)/(err_max-err_min));
-            c.at<cv::Vec3b>(sy, sx).val[2] = 0;
-            c.at<cv::Vec3b>(sy, sx).val[0] = 0;
-        }
-    }
-
-    return c;
-}
 
 
 bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request& req,
@@ -288,10 +247,8 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
             }
         }
         cv::Mat reconstructed_image = reconstructImageCPU(source,target,ann);
-        //cv::Mat error_map = reconstructError(source,target,ann);
         cv::Mat ann_map = ann2imageCPU(ann);
         cv::imwrite(req.reconstructed_image_file+"cpu_reconstructed_image.png",reconstructed_image);
-        //cv::imwrite("error_map.png",error_map);
         cv::imwrite(req.ann_file+"cpu_ann_map.png",ann_map);
         auto now=std::chrono::system_clock::now();
         std::chrono::duration<double> diff = now-start; //in seconds
@@ -301,12 +258,13 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
     {
         ROS_INFO("PatchMatch GPU Version");
         auto start=std::chrono::system_clock::now();
-
         cv::Mat ann_map,annd_map,reconstructed_image;
-        source.copyTo(reconstructed_image);
+        ROS_INFO("Running Kernel");
         Cuda::hostPatchMatch(source,target,req.patch_size,req.iters,ann_map,annd_map,reconstructed_image);
+        ROS_INFO("Writing image to hard disk");
         cv::imwrite(req.ann_file+"gpu_ann_map.png",ann_map);
         cv::imwrite(req.reconstructed_image_file+"gpu_reconstructed_image.png",reconstructed_image);
+
         auto now=std::chrono::system_clock::now();
         std::chrono::duration<double> diff = now-start; //in seconds
         std::cout << "PatchMatch GPU version time: "<<diff.count()<<" seconds"<<std::endl;;

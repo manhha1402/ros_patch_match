@@ -1,6 +1,6 @@
 # ros_patch_match
 
-Implementation of PatchMatch algorithm (CPU and GPU version) as a ROS service. The GPU version is much faster than CPU version
+Implementation of PatchMatch algorithm (CPU and GPU version) as a ROS service. The GPU(CUDA) version is much faster than CPU version
 
 Usage:
 
