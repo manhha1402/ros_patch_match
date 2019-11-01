@@ -4,6 +4,8 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <iostream>
+#include <fstream>
+
 namespace Cuda {
 
 __device__ float cuRand(unsigned int * seed) {
@@ -201,7 +203,7 @@ __host__ void initAnn(int * source,int * target,unsigned int *& ann,
 
 
 void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters, const int patch_size,
-                    cv::Mat& cvMatann, cv::Mat& cvMatannd,cv::Mat& reconstructed_image)
+                    std::string& ann_file, std::string& annd_file)
 {
 
 
@@ -251,24 +253,31 @@ void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters
     cudaMemcpy(annd_final_host, annd_device, size_of_ann * sizeof(float), cudaMemcpyDeviceToHost);
 
     //generate reconstructed, ann, annd images for visualization
-    cvMatann.create(source.rows,source.cols, CV_8UC3);
-    cvMatannd.create(source.rows,source.cols,CV_32FC1);
-    reconstructed_image.create(source.rows,source.cols, CV_8UC3);
+//    cv::Mat cvMatann(source.rows,source.cols, CV_8UC3);
+//    cv::Mat cvMatannd(source.rows,source.cols,CV_32FC1);
+//    cv::Mat reconstructed_image(source.rows,source.cols, CV_8UC3);
+    std::ofstream fs_ann(ann_file),fs_annd(annd_file);
     for (int r = 0; r < source.rows; r++) {
         for (int c = 0; c < source.cols; c++) {
 
-            int v = ann_final_host[r*source.cols+c];
-            int txbest = INT_TO_X(v);
-            int tybest = INT_TO_Y(v);
-            cvMatann.at<cv::Vec3b>(r,c)[2] = static_cast<unsigned char>(txbest * 255 / source.cols);
-            cvMatann.at<cv::Vec3b>(r,c)[1] = static_cast<unsigned char>(tybest * 255 / source.rows);
-            cvMatann.at<cv::Vec3b>(r,c)[0] = 255 - std::max(cvMatann.at<cv::Vec3b>(r,c)[2],
-                                            cvMatann.at<cv::Vec3b>(r,c)[1]);
-            reconstructed_image.at<cv::Vec3b>(r, c) = target.at<cv::Vec3b>(tybest, txbest);
-            cvMatannd.at<float>(r,c) = annd_final_host[r*source.cols+c];
+            int ann_value = ann_final_host[r*source.cols+c];
+            float annd_value = annd_final_host[r*source.cols+c];
+            fs_ann<<ann_value<<" ";
+            fs_annd<<annd_value<<" ";
+//            int txbest = INT_TO_X(v);
+//            int tybest = INT_TO_Y(v);
+//            cvMatann.at<cv::Vec3b>(r,c)[2] = static_cast<unsigned char>(txbest * 255 / source.cols);
+//            cvMatann.at<cv::Vec3b>(r,c)[1] = static_cast<unsigned char>(tybest * 255 / source.rows);
+//            cvMatann.at<cv::Vec3b>(r,c)[0] = 255 - std::max(cvMatann.at<cv::Vec3b>(r,c)[2],
+//                                            cvMatann.at<cv::Vec3b>(r,c)[1]);
+//            reconstructed_image.at<cv::Vec3b>(r, c) = target.at<cv::Vec3b>(tybest, txbest);
+            //annd_vector.push_back(annd_final_host[r*source.cols+c]);
         }
+        fs_ann << "\r\n";
+        fs_annd << "\r\n";
     }
-
+    fs_ann.close();
+    fs_annd.close();
 
     cudaFree(target_device);
     cudaFree(source_device);

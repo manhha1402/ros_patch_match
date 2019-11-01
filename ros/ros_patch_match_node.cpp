@@ -258,12 +258,11 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
     {
         ROS_INFO("PatchMatch GPU Version");
         auto start=std::chrono::system_clock::now();
-        cv::Mat ann_map,annd_map,reconstructed_image;
         ROS_INFO("Running Kernel");
-        Cuda::hostPatchMatch(source,target,req.patch_size,req.iters,ann_map,annd_map,reconstructed_image);
+        Cuda::hostPatchMatch(source,target,req.patch_size,req.iters,req.ann_file,req.annd_file);
         ROS_INFO("Writing image to hard disk");
-        cv::imwrite(req.ann_file+"gpu_ann_map.png",ann_map);
-        cv::imwrite(req.reconstructed_image_file+"gpu_reconstructed_image.png",reconstructed_image);
+        //cv::imwrite(req.ann_file+"gpu_ann_map.png",ann_map);
+        //cv::imwrite(req.reconstructed_image_file+"gpu_reconstructed_image.png",reconstructed_image);
 
         auto now=std::chrono::system_clock::now();
         std::chrono::duration<double> diff = now-start; //in seconds
