@@ -20,7 +20,7 @@ __device__ float cuRand(unsigned int * seed) {
 //L2 distance of RGB space between source patch and target patch
 
 __host__ __device__ float distance(int * source, int * target, int s_rows, int s_cols, int t_rows, int t_cols,
-                               int sx, int sy, int tx, int ty, int patch_size, float cutoff = INT_MAX) {
+                                   int sx, int sy, int tx, int ty, int patch_size, float cutoff = INT_MAX) {
     // patch_size is an odd number
     float ans = 0, num = 0;//number of pixels realy counted
     for (int dy = -patch_size/2; dy <= patch_size/2; dy++) {
@@ -49,7 +49,7 @@ __host__ __device__ float distance(int * source, int * target, int s_rows, int s
 //compare L2 distance of current best match and current match, replace current best match if distance is smaller
 
 __device__ void compareDistance(int * source, int * target, int s_rows, int s_cols, int t_rows, int t_cols,
-                              int sx, int sy, int &txbest, int &tybest, float &dbest, int xp, int yp, int patch_size) {
+                                int sx, int sy, int &txbest, int &tybest, float &dbest, int xp, int yp, int patch_size) {
     float d = 0;
     d = distance(source, target, s_rows, s_cols, t_rows, t_cols, sx, sy, xp, yp, patch_size, dbest);
 
@@ -185,8 +185,8 @@ __host__ void convertcvMat2Array(const cv::Mat& img,int*& array)
     }
 }
 __host__ void initAnn(int * source,int * target,unsigned int *& ann,
-                float *& annd, int s_cols, int s_rows,
-                int t_cols, int t_rows,int patch_size)
+                      float *& annd, int s_cols, int s_rows,
+                      int t_cols, int t_rows,int patch_size)
 {
 #pragma omp parallel for schedule(static)
     for (int sy = 0; sy < s_rows; sy++) {
@@ -203,7 +203,7 @@ __host__ void initAnn(int * source,int * target,unsigned int *& ann,
 
 
 void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters, const int patch_size,
-                    std::string& ann_file, std::string& annd_file)
+                    std::string& ann_file)
 {
 
 
@@ -212,9 +212,6 @@ void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters
     int *source_host, *target_host,*source_device, *target_device;
     unsigned int *ann_host,*ann_device,*ann_final_host;
     float *annd_host,*annd_device,*annd_final_host;
-    int *params_host, *params_device;
-
-
     const int size_of_source = source.cols * source.rows * 3;
     const int size_of_target = target.cols * target.rows * 3;
     const int size_of_ann = source.cols * source.rows;
@@ -253,32 +250,34 @@ void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters
     cudaMemcpy(annd_final_host, annd_device, size_of_ann * sizeof(float), cudaMemcpyDeviceToHost);
 
     //generate reconstructed, ann, annd images for visualization
-//    cv::Mat cvMatann(source.rows,source.cols, CV_8UC3);
-//    cv::Mat cvMatannd(source.rows,source.cols,CV_32FC1);
-//    cv::Mat reconstructed_image(source.rows,source.cols, CV_8UC3);
-    std::ofstream fs_ann(ann_file),fs_annd(annd_file);
+    //    cv::Mat cvMatann(source.rows,source.cols, CV_8UC3);
+    //    cv::Mat cvMatannd(source.rows,source.cols,CV_32FC1);
+    //    cv::Mat reconstructed_image(source.rows,source.cols, CV_8UC3);
+    //  double sum = 0;
+    std::ofstream outFile(ann_file);
     for (int r = 0; r < source.rows; r++) {
         for (int c = 0; c < source.cols; c++) {
 
-            int ann_value = ann_final_host[r*source.cols+c];
-            float annd_value = annd_final_host[r*source.cols+c];
-            fs_ann<<ann_value<<" ";
-            fs_annd<<annd_value<<" ";
-//            int txbest = INT_TO_X(v);
-//            int tybest = INT_TO_Y(v);
-//            cvMatann.at<cv::Vec3b>(r,c)[2] = static_cast<unsigned char>(txbest * 255 / source.cols);
-//            cvMatann.at<cv::Vec3b>(r,c)[1] = static_cast<unsigned char>(tybest * 255 / source.rows);
-//            cvMatann.at<cv::Vec3b>(r,c)[0] = 255 - std::max(cvMatann.at<cv::Vec3b>(r,c)[2],
-//                                            cvMatann.at<cv::Vec3b>(r,c)[1]);
-//            reconstructed_image.at<cv::Vec3b>(r, c) = target.at<cv::Vec3b>(tybest, txbest);
+            int index = r*source.cols+c;
+            int ann_value = ann_final_host[index];
+            int txbest = INT_TO_X(ann_value);
+            int tybest = INT_TO_Y(ann_value);
+            float annd_value = annd_final_host[index];
+
+            outFile<<txbest<<" "<<tybest<<" "<<annd_value<<std::endl;
+            //            sum+=annd_value;
+            //            cvMatann.at<cv::Vec3b>(r,c)[2] = static_cast<unsigned char>(txbest * 255 / source.cols);
+            //            cvMatann.at<cv::Vec3b>(r,c)[1] = static_cast<unsigned char>(tybest * 255 / source.rows);
+            //            cvMatann.at<cv::Vec3b>(r,c)[0] = 255 - std::max(cvMatann.at<cv::Vec3b>(r,c)[2],
+            //                    cvMatann.at<cv::Vec3b>(r,c)[1]);
+            //            reconstructed_image.at<cv::Vec3b>(r, c) = target.at<cv::Vec3b>(tybest, txbest);
             //annd_vector.push_back(annd_final_host[r*source.cols+c]);
         }
-        fs_ann << "\r\n";
-        fs_annd << "\r\n";
-    }
-    fs_ann.close();
-    fs_annd.close();
 
+    }
+    //    cv::imwrite("recon_srv.png",reconstructed_image);
+    //    cv::imwrite("ann_srv.png",cvMatann);
+    outFile.close();
     cudaFree(target_device);
     cudaFree(source_device);
     cudaFree(ann_device);
