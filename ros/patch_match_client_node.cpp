@@ -1,4 +1,4 @@
-#include <opencv2/opencv.hpp>
+﻿#include <opencv2/opencv.hpp>
 #include <iostream>
 #include <boost/filesystem.hpp>
 #include <ros/ros.h>
@@ -27,8 +27,8 @@ int main(int argc, char** argv)
     // Get all jpg in the folder
     cv::glob(data_path+"*.jpg",source_files);
 
-    srv.request.source_file = source_files[0];
-    srv.request.target_file = source_files[1];
+    srv.request.source_file = data_path+"00000.jpg";
+    srv.request.target_file = data_path+"00001.jpg";
     srv.request.ann_file = data_path+"ann.txt";
     //srv.request.reconstructed_image_file = data_path+ss.str();
     client.waitForExistence();
@@ -51,8 +51,8 @@ int main(int argc, char** argv)
         }
     }
     */
-    cv::Mat source = cv::imread(source_files[0]);
-    cv::Mat target = cv::imread(source_files[1]);
+    cv::Mat source = cv::imread(srv.request.source_file);
+    cv::Mat target = cv::imread(srv.request.target_file);
     cv::Mat ann(source.rows,source.cols,CV_8UC3),reconstructed_image(source.rows,source.cols,CV_8UC3);
     std::ifstream infile(srv.request.ann_file.c_str(), std::ios::in | std::ios::binary);
     if ( !infile.is_open() ) {

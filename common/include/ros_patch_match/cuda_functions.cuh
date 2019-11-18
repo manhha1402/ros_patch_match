@@ -8,5 +8,5 @@
 namespace Cuda {
 
 void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters, const int patch_size,
-                    std::string& ann_file);
+                    std::string& output_file);
 }

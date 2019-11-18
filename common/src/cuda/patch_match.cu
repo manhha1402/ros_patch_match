@@ -203,7 +203,7 @@ __host__ void initAnn(int * source,int * target,unsigned int *& ann,
 
 
 void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters, const int patch_size,
-                    std::string& ann_file)
+                    std::string& output_file)
 {
 
 
@@ -254,7 +254,7 @@ void hostPatchMatch(const cv::Mat& source, const cv::Mat& target,const int iters
     //    cv::Mat cvMatannd(source.rows,source.cols,CV_32FC1);
     //    cv::Mat reconstructed_image(source.rows,source.cols, CV_8UC3);
     //  double sum = 0;
-    std::ofstream outFile(ann_file);
+    std::ofstream outFile(output_file);
     for (int r = 0; r < source.rows; r++) {
         for (int c = 0; c < source.cols; c++) {
 

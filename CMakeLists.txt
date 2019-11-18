@@ -23,9 +23,24 @@ set(catkin_BUILD_PACKAGES
 find_package(catkin REQUIRED COMPONENTS
     ${catkin_BUILD_PACKAGES}
     )
-find_package(CUDA REQUIRED)
-SET(CUDA_PROPAGATE_HOST_FLAGS OFF)
-SET(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3;-std=c++14 -D_MWAITXINTRIN_H_INCLUDED -lcudart -lcublas -lcurand -gencode arch=compute_61,code=sm_61)
+find_package(CUDA 8.0 REQUIRED)
+#SET(CUDA_PROPAGATE_HOST_FLAGS OFF)
+#SET(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3;-std=c++14 -D_MWAITXINTRIN_H_INCLUDED -lcudart -lcublas -lcurand -gencode arch=compute_61,code=sm_61)
+
+list(APPEND 3RDPARTY_INCLUDE_DIRS ${CUDA_TOOLKIT_INCLUDE})
+list(APPEND 3RDPARTY_LIBRARIES
+        ${CUDA_LIBRARIES} ${CUDA_curand_LIBRARY})
+include_directories(${PROJECT_SOURCE_DIR}/src)
+include_directories(${3RDPARTY_INCLUDE_DIRS})
+link_directories(${3RDPARTY_LIBRARY_DIRS})
+# (testing) flags for cuda code generation
+set(CUDA_NVCC_FLAGS
+        -std=c++14
+        -gencode=arch=compute_61,code=sm_61
+        -gencode=arch=compute_75,code=sm_75
+        --expt-relaxed-constexpr)
+
+
 find_package(catkin REQUIRED COMPONENTS ${catkin_RUN_PACKAGES})
 find_package(Boost REQUIRED COMPONENTS filesystem system)
 find_package(OpenCV 3 REQUIRED)
@@ -56,7 +71,7 @@ file(MAKE_DIRECTORY ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_LIB_DESTINATION})
 
 file(GLOB CUDA_SRCS "${PROJECT_SOURCE_DIR}/common/src/cuda/*.cu")
 CUDA_ADD_LIBRARY(${PROJECT_NAME} "${CUDA_SRCS}")
-target_link_libraries(${PROJECT_NAME} ${CUDA_LIBRARIES} ${OpenCV_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${3RDPARTY_LIBRARIES} ${OpenCV_LIBRARIES})
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 
