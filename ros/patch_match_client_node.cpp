@@ -23,7 +23,6 @@ int main(int argc, char** argv)
     std::vector<cv::String> source_files,target_files;
     std::string data_path = ros::package::getPath("ros_patch_match")+"/color_map_data/";
 
-
     // Get all jpg in the folder
     cv::glob(data_path+"*.jpg",source_files);
 
@@ -33,24 +32,7 @@ int main(int argc, char** argv)
     //srv.request.reconstructed_image_file = data_path+ss.str();
     client.waitForExistence();
     client.call(srv);
-    /*
-    target_files = source_files;
 
-    for (int i=0;i<source_files.size();i++) {
-        for (int j=0;j<target_files.size();j++) {
-            std::cout<<"process "<<i<<":"<<j<<std::endl;
-            std::ostringstream ss;
-            ss<<i<<"_"<<j;
-            srv.request.source_file = source_files[i];
-            srv.request.target_file = target_files[j];
-            srv.request.ann_file = data_path+ss.str();
-            srv.request.annd_file = data_path+ss.str();
-            srv.request.reconstructed_image_file = data_path+ss.str();
-            client.waitForExistence();
-            client.call(srv);
-        }
-    }
-    */
     cv::Mat source = cv::imread(srv.request.source_file);
     cv::Mat target = cv::imread(srv.request.target_file);
     cv::Mat ann(source.rows,source.cols,CV_8UC3),reconstructed_image(source.rows,source.cols,CV_8UC3);
