@@ -1,41 +1,19 @@
-language: generic # optional, just removes the language badge
+sudo: required
 dist: bionic
-services:
-  - docker
-# include the following block if the C/C++ build artifacts should get cached by Travis,
-# CCACHE_DIR needs to get set as well to actually fill the cache
-cache:
-  directories:
-    - $HOME/.ccache
+language: generic
 
-git:
-  quiet: true # optional, silences the cloning of the target repository
+ 
 env:
-  - CUDA=10.1.105-1
-  - CUDA_SHORT=10.1
-  - UBUNTU_VERSION=ubuntu1804
-  global: # global settings for all jobs
-    - ROS_REPO=ros
-    - CCACHE_DIR=$HOME/.ccache # enables C/C++ caching in industrial_ci
-  matrix: # each line is a job
-    - ROS_DISTRO="melodic"
-    
-before_install:
-  - INSTALLER=cuda-repo-${UBUNTU_VERSION}_${CUDA}_amd64.deb
-  - wget http://developer.download.nvidia.com/compute/cuda/repos/${UBUNTU_VERSION}/x86_64/${INSTALLER}
-  - sudo dpkg -i ${INSTALLER}
-  - wget https://developer.download.nvidia.com/compute/cuda/repos/${UBUNTU_VERSION}/x86_64/7fa2af80.pub
-  - sudo apt-key add 7fa2af80.pub
-  - sudo apt update -qq
-  - sudo apt install -y cuda-core-${CUDA_SHORT/./-} cuda-cudart-dev-${CUDA_SHORT/./-} cuda-cufft-dev-${CUDA_SHORT/./-}
-  - sudo apt clean
-  - CUDA_HOME=/usr/local/cuda-${CUDA_SHORT}
-  - LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
-  - PATH=${CUDA_HOME}/bin:${PATH}
-  - PATH=${PATH}:${PWD}    
-# clone and run industrial_ci
-# clone and run industrial_ci
+  global:
+    - UPSTREAM_WORKSPACE=file
+    - CATKIN_CONFIG='--cmake-args -DCMAKE_CXX_FLAGS="-Werror=uninitialized -Werror=return-type -Werror=format"'
+  matrix:
+    - ROS_DISTRO="kinetic" ROS_REPOSITORY_PATH=http://packages.ros.org/ros/ubuntu
+    - ROS_DISTRO="kinetic" ROS_REPOSITORY_PATH=http://packages.ros.org/ros/ubuntu BEFORE_SCRIPT='catkin config -w $CATKIN_WORKSPACE -a -DPUBLICBUILD=1'
+    - ROS_DISTRO="melodic" ROS_REPOSITORY_PATH=http://packages.ros.org/ros/ubuntu
+    - ROS_DISTRO="melodic" ROS_REPOSITORY_PATH=http://packages.ros.org/ros/ubuntu BEFORE_SCRIPT='catkin config -w $CATKIN_WORKSPACE -a -DPUBLICBUILD=1'
 install:
-  - git clone --quiet --depth 1 https://github.com/ros-industrial/industrial_ci.git .industrial_ci
+  - git clone https://github.com/ros-industrial/industrial_ci.git .ci_config
 script:
-  - .industrial_ci/travis.sh  
+  - .ci_config/travis.sh
+#  - ./travis.sh  # Enable this when you have a package-local script
