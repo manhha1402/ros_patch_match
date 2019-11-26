@@ -2,18 +2,18 @@
 sudo: required
 dist: bionic
 language: generic
-
+services:
+  - docker
  
 env:
   global:
     - CUDA=10.1.105-1
     - CUDA_SHORT=10.1
     - UBUNTU_VERSION=ubuntu1804
-    - UPSTREAM_WORKSPACE=file
-    - CATKIN_CONFIG='--cmake-args -DCMAKE_CXX_FLAGS="-Werror=uninitialized -Werror=return-type -Werror=format"'
+    - ROS_REPO=ros
+    - CCACHE_DIR=$HOME/.ccache # enables C/C++ caching in industrial_ci
   matrix:
-    - ROS_DISTRO="melodic" ROS_REPOSITORY_PATH=http://packages.ros.org/ros/ubuntu
-    - ROS_DISTRO="melodic" ROS_REPOSITORY_PATH=http://packages.ros.org/ros/ubuntu BEFORE_SCRIPT='catkin config -w $CATKIN_WORKSPACE -a -DPUBLICBUILD=1'
+    - ROS_DISTRO="melodic"
 before_install:
   - INSTALLER=cuda-repo-${UBUNTU_VERSION}_${CUDA}_amd64.deb
   - wget http://developer.download.nvidia.com/compute/cuda/repos/${UBUNTU_VERSION}/x86_64/${INSTALLER}
