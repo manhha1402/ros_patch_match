@@ -1,6 +1,6 @@
 # ros_patch_match
 
-Status:  [![Build Status](https://travis-ci.com/ipa-mah/ros_patch_match.svg?branch=master)](https://travis-ci.com/ipa-mah/ros_patch_match)
+Travis CI status:  [![Build Status](https://travis-ci.com/ipa-mah/ros_patch_match.svg?branch=master)](https://travis-ci.com/ipa-mah/ros_patch_match)
 ------------------
 
 Implementation of PatchMatch algorithm (CPU and GPU version) as a ROS service. The GPU(CUDA) version is much faster than CPU version
