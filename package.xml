@@ -11,7 +11,6 @@
 <depend>cmake_modules</depend>
 <depend>libpcl-all-dev</depend>
 <depend>eigen</depend>
-<depend>nvidia-cuda-dev</depend>
 <depend>libopencv-dev</depend>
 <depend>message_generation</depend>
 <depend>message_runtime</depend>
