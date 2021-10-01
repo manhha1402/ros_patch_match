@@ -146,7 +146,7 @@ void PatchMatch::initAnnCPU(cv::Mat& ann, cv::Mat& annd,const cv::Mat& source,
 
 cv::Mat PatchMatch::reconstructImageCPU(const cv::Mat& source, const cv::Mat& target,const cv::Mat& ann)
 {
-    cv::Mat source_recon;
+    cv::Mat source_recon = cv::Mat(source.rows,source.cols,CV_8UC3);
 #pragma omp parallel for schedule(static)
     for (int sy = 0; sy < source.rows; sy++) {
         for (int sx = 0; sx < source.cols; sx++)
@@ -246,10 +246,11 @@ bool PatchMatch::patchMatchCallback(ros_patch_match::PatchMatchService::Request&
                 }
             }
         }
+
         cv::Mat reconstructed_image = reconstructImageCPU(source,target,ann);
         cv::Mat ann_map = ann2imageCPU(ann);
-        cv::imwrite(req.reconstructed_image_file+"cpu_reconstructed_image.png",reconstructed_image);
-        cv::imwrite(req.ann_file+"cpu_ann_map.png",ann_map);
+        cv::imwrite("cpu_reconstructed_image.png",reconstructed_image);
+        cv::imwrite("cpu_ann_map.png",ann_map);
         auto now=std::chrono::system_clock::now();
         std::chrono::duration<double> diff = now-start; //in seconds
         std::cout << "PatchMatch CPU version time: "<<diff.count()<<" seconds"<<std::endl;;

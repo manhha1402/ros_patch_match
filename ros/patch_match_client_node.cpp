@@ -16,7 +16,7 @@ int main(int argc, char** argv)
 
     ros_patch_match::PatchMatchService srv;
     srv.request.iters = 5;
-    srv.request.use_gpu = true;
+    srv.request.use_gpu = false;
     srv.request.patch_size = 7;
 
 

@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 2.8.3)
 project(ros_patch_match)
 add_compile_options(-std=c++14)
 find_package(OpenMP)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+SET(CMAKE_BUILD_TYPE Release)
+
 if (OPENMP_FOUND)
     set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
@@ -23,27 +26,13 @@ set(catkin_BUILD_PACKAGES
 find_package(catkin REQUIRED COMPONENTS
     ${catkin_BUILD_PACKAGES}
     )
-find_package(CUDA 8.0 REQUIRED)
-#SET(CUDA_PROPAGATE_HOST_FLAGS OFF)
-#SET(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS};-O3;-std=c++14 -D_MWAITXINTRIN_H_INCLUDED -lcudart -lcublas -lcurand -gencode arch=compute_61,code=sm_61)
-
-list(APPEND 3RDPARTY_INCLUDE_DIRS ${CUDA_TOOLKIT_INCLUDE})
-list(APPEND 3RDPARTY_LIBRARIES
-        ${CUDA_LIBRARIES} ${CUDA_curand_LIBRARY})
-include_directories(${PROJECT_SOURCE_DIR}/src)
-include_directories(${3RDPARTY_INCLUDE_DIRS})
-link_directories(${3RDPARTY_LIBRARY_DIRS})
-# (testing) flags for cuda code generation
-set(CUDA_NVCC_FLAGS
-        -std=c++14
-        -gencode=arch=compute_61,code=sm_61
-        -gencode=arch=compute_75,code=sm_75
-        --expt-relaxed-constexpr)
+include("${CMAKE_SOURCE_DIR}/cmake/find_cuda.cmake")
 
 
 find_package(catkin REQUIRED COMPONENTS ${catkin_RUN_PACKAGES})
 find_package(Boost REQUIRED COMPONENTS filesystem system)
-find_package(OpenCV 3 REQUIRED)
+find_package(OpenCV REQUIRED NO_MODULE PATHS /usr/local NO_DEFAULT_PATH)
+
 add_service_files(
     FILES
     PatchMatchService.srv
@@ -70,8 +59,8 @@ file(MAKE_DIRECTORY ${CATKIN_DEVEL_PREFIX}/${CATKIN_PACKAGE_LIB_DESTINATION})
 
 
 file(GLOB CUDA_SRCS "${PROJECT_SOURCE_DIR}/common/src/cuda/*.cu")
-CUDA_ADD_LIBRARY(${PROJECT_NAME} "${CUDA_SRCS}")
-target_link_libraries(${PROJECT_NAME} ${3RDPARTY_LIBRARIES} ${OpenCV_LIBRARIES})
+cuda_add_library(${PROJECT_NAME} "${CUDA_SRCS}")
+target_link_libraries(${PROJECT_NAME} ${CUDA_LIBRARIES} ${OpenCV_LIBRARIES})
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 
